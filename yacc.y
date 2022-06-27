@@ -40,7 +40,6 @@
 
     int is_function=0;          //Is a function (flag)
     int error=0;                //Error flag
-    int global = 0;             //Global var falg
     int ind = 0;                //Indentation
     //int function_definition = 0;//Funcion definition flag
 
@@ -99,7 +98,7 @@
 primary_expr
 	: IDENTIFIER { fprintf(yy_output, "%s", yytext); }
 	| CONSTANT { fprintf(yy_output, "%s", yytext); }
-    | INT IDENTIFIER { fprintf(yy_output, "%s=None", yytext);}
+	| declaration
 	| '(' { print("("); } expr ')' { print(")"); }
 	;
 
@@ -211,15 +210,15 @@ inclusive_or_expr
 /*'Logic AND' operator*/
 logical_and_expr
 	: inclusive_or_expr
-	| logical_and_expr AND_OP { fprintf(yy_output, " && "); } inclusive_or_expr
-	| logical_and_expr AND_OP { fprintf(yy_output, " && "); } error {yyerrok;}
+	| logical_and_expr AND_OP { fprintf(yy_output, " and "); } inclusive_or_expr
+	| logical_and_expr AND_OP { fprintf(yy_output, " and "); } error {yyerrok;}
     ;
 
 /*'Logic OR' operator*/
 logical_or_expr
 	: logical_and_expr
-	| logical_or_expr OR_OP { fprintf(yy_output, " || "); } logical_and_expr
-    | logical_or_expr OR_OP { fprintf(yy_output, " || "); } error {yyerrok;}
+	| logical_or_expr OR_OP { fprintf(yy_output, " or "); } logical_and_expr
+    | logical_or_expr OR_OP { fprintf(yy_output, " or "); } error {yyerrok;}
     ;
 
 /*Conditional expr*/
@@ -266,7 +265,8 @@ declaration
     : declaration_specifiers init_declarator_list ';'
     {
         for(symtable_set_type=sym_table; symtable_set_type!=(symrec *)0; symtable_set_type=(symrec *)symtable_set_type->next)
-			if(symtable_set_type->type==-1) symtable_set_type->type=$1;
+			if(symtable_set_type->type==-1)
+				symtable_set_type->type=$1;
 	}
 	| declaration_specifiers init_declarator_list error { yyerror("A \";\" (semicolon) is missing"); yyerrok; }
 	;
@@ -398,12 +398,6 @@ statement
 	| jump_statement
 	;
 
-/*Labeled statements*/
-labeled_statement
-	: CASE { fprintf(yy_output, "case "); } constant_expr ':' { fprintf(yy_output, ": "); } statement
-	| DEFAULT { fprintf(yy_output, "default "); } ':' { fprintf(yy_output, ": "); } statement
-	;
-
 /*Open scope*/
 open_curly
     : '{'
@@ -462,21 +456,21 @@ else_statement
 selection_statement
 	: IF { print("if"); } '(' { print("("); } expr ')' { print("):"); } statement  else_statement
     | IF { print("if"); } error expr ')' { print("):"); } statement { yyerror("A \"(\" (open parenthesis) is missing after the 'if' statement");yyerrok; }
-	| SWITCH { fprintf(yy_output, "switch"); } '(' { print("("); } expr ')' { print(")"); } statement { fprintf(yy_output,"end\n"); indent(); }
+	| SWITCH { fprintf(yy_output, "match "); } '(' expr ')' { print(":"); } statement 
 	;
+
+/*Labeled statements*/
+labeled_statement
+	: CASE { fprintf(yy_output, "case "); } constant_expr ':' { fprintf(yy_output, ":\n\t"); indent();} statement {print("\t");}
+	| DEFAULT { fprintf(yy_output, "case _ "); } ':' { fprintf(yy_output, ":\n\t "); indent();} statement
+	;
+
 // END conditional
 
 // INIC LOOPS
 // @todo: implementar mas casos de FOR.
 // 
 /*Open parenthesis*/
-open_parenthesis
-    : '(' { print("for("); }
-  	;
-/*Close parenthesis*/
-close_parenthesis
-    : ')' { print(")"); }
-  	;
 /*While*/
 while
     : WHILE { print("while "); }
@@ -484,22 +478,32 @@ while
 
 // INIC loops
 postfix_for
-	: IDENTIFIER
-    | CONSTANT
-	| IDENTIFIER INC_OP { fprintf(yy_output, "\n\t"); indent();}
-	| IDENTIFIER DEC_OP { fprintf(yy_output, "\n\t"); indent();}
+	: IDENTIFIER INC_OP { fprintf(yy_output, "):\t"); indent();}
+	| IDENTIFIER DEC_OP { fprintf(yy_output, ",-1):\t"); indent();}
+	| INC_OP IDENTIFIER { fprintf(yy_output, "):\t"); indent();}
+	| DEC_OP IDENTIFIER { fprintf(yy_output, ",-1):\t"); indent();}
 	;
 
+/* assignment_expr */
+
 loops_relational
-    : IDENTIFIER '<' CONSTANT ';' { fprintf(yy_output, "%s):", $3);} postfix_for ')'
-    | IDENTIFIER LE_OP CONSTANT ';' { int n = atoi($3)+1; fprintf(yy_output, "%d):", n);} postfix_for ')'
+    : IDENTIFIER '<' CONSTANT ';' { fprintf(yy_output, "%s", $3);} postfix_for ')'
+    | IDENTIFIER LE_OP CONSTANT ';' { int n = atoi($3)+1; fprintf(yy_output, "%d", n);} postfix_for ')'
+	| IDENTIFIER '<' IDENTIFIER ';' { fprintf(yy_output, "%s", $3);} postfix_for ')'
+    | IDENTIFIER LE_OP IDENTIFIER ';' { int n = atoi($3)+1; fprintf(yy_output, "%d", n);} postfix_for ')'
+	| IDENTIFIER '>' CONSTANT ';' { fprintf(yy_output, "%s", $3);} postfix_for ')'
+    | IDENTIFIER GE_OP CONSTANT ';' { int n = atoi($3)+1; fprintf(yy_output, "%d", n);} postfix_for ')'
+	| IDENTIFIER '>' IDENTIFIER ';' { fprintf(yy_output, "%s", $3);} postfix_for ')'
+    | IDENTIFIER GE_OP IDENTIFIER ';' { int n = atoi($3)+1; fprintf(yy_output, "%d", n);} postfix_for ')'
+
 
 /*loops*/
 iteration_statement
     : while '(' {print("(");} expr ')' {print("):");} statement
     | while error expr ')' statement { yyerror("A \"(\" (open parenthesis) is missing");yyerrok; }
-    | DO statement WHILE open_parenthesis expr close_parenthesis ';' { print("\n"); indent(); }
+    | DO { print("while(1):"); indent();} statement WHILE '(' { print("\tif("); } expr ')' { print("):\n\t"); indent(); print("\tbreak\n"); } ';' {indent();}
     | FOR '(' IDENTIFIER '=' CONSTANT ';' { fprintf(yy_output, "for %s in range(%s,", $3, $5); } loops_relational
+	| FOR '(' IDENTIFIER '=' IDENTIFIER ';' { fprintf(yy_output, "for %s in range(%s,", $3, $5); } loops_relational
 	;
 // END LOOPS
 
