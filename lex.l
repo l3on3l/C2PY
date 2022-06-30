@@ -48,12 +48,12 @@ IS          (u|U|l|LETTER)*
 "//"                                            { line_comment(); }
 "#include ""<"((_|{LETTER}*)"."{LETTER}*)">"    { }
 "const"                                         { return(CONST); }
+"printf"                                        { yylval.name = strdup(yytext); return(PRINTFF); }
 
 "char"                                          { yylval.type = CHAR; return(CHAR); }
 "double"                                        { yylval.type = DOUBLE; return(DOUBLE); }
 "float"                                         { yylval.type = FLOAT; return(FLOAT); }
 "int"                                           { yylval.type = INT; return(INT); }
-"long"                                          { yylval.type = LONG; return(LONG); }
 "signed"                                        { yylval.type = SIGNED; return(SIGNED); }
 "unsigned"                                      { yylval.type = UNSIGNED; return(UNSIGNED); }
 "void"                                          { yylval.type = VOID; return(VOID); }
@@ -80,18 +80,11 @@ LETTER?'(\\.|[^\\'])+'                          { yylval.name = strdup(yytext); 
 ('-')?{DIGIT}*"."{DIGIT}+({EXPONENTIAL})?{FS}?  { yylval.name = strdup(yytext); return(CONSTANT); }
 ('-')?{DIGIT}+"."{DIGIT}*({EXPONENTIAL})?{FS}?  { yylval.name = strdup(yytext); return(CONSTANT); }
 
-">>="                                           { return(RIGHT_ASSIGN); }
-"<<="                                           { return(LEFT_ASSIGN); }
 "+="                                            { return(ADD_ASSIGN); }
 "-="                                            { return(SUB_ASSIGN); }
 "*="                                            { return(MUL_ASSIGN); }
 "/="                                            { return(DIV_ASSIGN); }
 "%="                                            { return(MOD_ASSIGN); }
-"&="                                            { return(AND_ASSIGN); }
-"^="                                            { return(XOR_ASSIGN); }
-"|="                                            { return(OR_ASSIGN); }
-">>"                                            { return(RIGHT_OP); }
-"<<"                                            { return(LEFT_OP); }
 "++"                                            { return(INC_OP); }
 "--"                                            { return(DEC_OP); }
 "&&"                                            { return(AND_OP); }
@@ -110,8 +103,6 @@ LETTER?'(\\.|[^\\'])+'                          { yylval.name = strdup(yytext); 
 "%"                                             { return('%'); }
 "<"                                             { return('<'); }
 ">"                                             { return('>'); }
-"^"                                             { return('^'); }
-"|"                                             { return('|'); }
 "?"                                             { return('?'); }
 ("}"|"%>")                                      { return('}'); }
 ":"                                             { return(':'); }
@@ -121,9 +112,9 @@ LETTER?'(\\.|[^\\'])+'                          { yylval.name = strdup(yytext); 
 ("["|"<:")                                      { return('['); }
 ("]"|":>")                                      { return(']'); }
 "."                                             { return('.'); }
-"&"                                             { return('&'); }
 "!"                                             { return('!'); }
-"~"                                             { return('~'); }
+["].*["]                                        { yylval.name = strdup(yytext); return(STR); }
+
 
 [ \t\v\f]                                       { count(); }
 \n                                              { ++line_number; }
