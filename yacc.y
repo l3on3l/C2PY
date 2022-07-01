@@ -676,8 +676,7 @@ int main(int argc,char **argv){
     print("\tmain()\n");
 	fclose(yyin);
 	fclose(yy_output);
-	// @REMOVE print_sym_table()
-	print_sym_table();
+	/* print_sym_table(); */
     /*Translation finished: messages*/
 	if(error)   printf("ERROR in the translation: %s\n", argv[1]);
 	else        printf("SUCCESS translating %s\nTranslated file: %s\n", argv[1], argv[2]);
