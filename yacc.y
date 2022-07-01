@@ -92,7 +92,7 @@
 %token CASE DEFAULT IF ELSE SWITCH WHILE DO FOR CONTINUE BREAK RETURN
 
 /*Types tokens*/
-%token <name> IDENTIFIER CONSTANT PRINTFF STR
+%token <name> IDENTIFIER CONSTANT PRINTFF STR CHARACTER
 %token <type> CHAR INT SIGNED UNSIGNED FLOAT DOUBLE CONST VOID
 
 /*Other*/
@@ -115,6 +115,8 @@
 // @todo: colocar los demas tipos
 primary_expr
 	: IDENTIFIER { fprintf(yy_output, "%s", yytext); if(current_op) strcpy(type_aux,$1);}
+	| CHARACTER { fprintf(yy_output, "%s", yytext); }
+	| STR { fprintf(yy_output, "%s", yytext); }
 	| CONSTANT { fprintf(yy_output, "%s", yytext); }
 	/* | declaration */
 	| '(' { print("("); } expr ')' { print(")"); }
@@ -358,6 +360,8 @@ initializer_list
 initializer
 	: IDENTIFIER
 	| CONSTANT
+	| STR
+	| CHARACTER
 	| '{' initializer_list '}' { asprintf(&$$, "[%s]", $2); }
 	;
 
@@ -551,10 +555,28 @@ symrec * getsym(char *sym_name) {
 
 void print_sym_table()
 {
-	printf("\n\n\t\t\tSym Table\n");
+	printf("\n\n\t\t\tSymbol Table\n");
     symrec *ptr;
+	printf("Identifier\t\tValue Type\t\tSymbol Type\t\tConstant\n");
     for (ptr = sym_table; ptr != (symrec *)0; ptr = (symrec *)ptr->next) {
-        printf("ID:%s\nType: %d\ndata_type:%d\n is_const %d\n\n", ptr->name, ptr->type, ptr->data_type, ptr->is_const);
+		char *str_type = get_type(ptr->data_type);
+		char sym_type[100];
+		char str_const[10];
+		if(ptr->function == 1) {
+			strcpy(sym_type, "function");
+			strcpy(str_const, "-");
+		}
+		else {
+			strcpy(sym_type, "variable");
+			strcpy(str_const, "-");
+		}
+
+		if(ptr->is_const && ptr->function != 1)
+			strcpy(str_const, "yes");
+		else if (!ptr->is_const && ptr->function != 1)
+			strcpy(str_const, "no");
+
+        printf("%s\t\t\t%s\t\t\t%s\t\t%s\n", ptr->name, str_type, sym_type, str_const);
 	}	
 }
 
@@ -655,7 +677,7 @@ int main(int argc,char **argv){
 	fclose(yyin);
 	fclose(yy_output);
 	// @REMOVE print_sym_table()
-	/* print_sym_table(); */
+	print_sym_table();
     /*Translation finished: messages*/
 	if(error)   printf("ERROR in the translation: %s\n", argv[1]);
 	else        printf("SUCCESS translating %s\nTranslated file: %s\n", argv[1], argv[2]);

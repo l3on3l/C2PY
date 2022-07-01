@@ -112,7 +112,7 @@ LETTER?'(\\.|[^\\'])+'                          { yylval.name = strdup(yytext); 
 "."                                             { return('.'); }
 "!"                                             { return('!'); }
 ["].*["]                                        { yylval.name = strdup(yytext); return(STR); }
-
+['].[']                                         { yylval.name = strdup(yytext); return(CHARACTER); }                                        
 
 [ \t\v\f]                                       { count(); }
 \n                                              { ++line_number; }
