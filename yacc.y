@@ -39,8 +39,9 @@
     extern FILE *yyin;      //Source file to be translated
     extern char *yytext;    //Recognizes input tokens
     extern int line_number; //Line number
-	extern void print_type();
+	extern char *get_type(int type);
 	extern int check_const_var(char *name);
+	extern int check_type_op(char *name1, char *name2, char op);
 
     FILE *yy_output;        //Object file
     
@@ -57,7 +58,8 @@
     int global = 0;             //Global var falg
     int ind = 0;                //Indentation
 	int current_type;
-	int current_const;
+	int current_op;
+	char type_aux[100];
     //int function_definition = 0;//Funcion definition flag
 
     /*Creates an indentation*/
@@ -112,7 +114,7 @@
 /*If it is an identifier, saves it into the file*/
 // @todo: colocar los demas tipos
 primary_expr
-	: IDENTIFIER { fprintf(yy_output, "%s", yytext); }
+	: IDENTIFIER { fprintf(yy_output, "%s", yytext); if(current_op) strcpy(type_aux,$1);}
 	| CONSTANT { fprintf(yy_output, "%s", yytext); }
 	/* | declaration */
 	| '(' { print("("); } expr ')' { print(")"); }
@@ -126,8 +128,8 @@ postfix_expr
 	| postfix_expr '(' { print("("); } argument_expr_list ')' { print(")"); }
 	| postfix_expr INC_OP { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, "+=1"); } //var++
 	| postfix_expr DEC_OP { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, "-=1"); } //var--
-	| INC_OP IDENTIFIER { if(check_const_var($2)) yyerrok; fprintf(yy_output, "+=1"); } //++var
-	| DEC_OP IDENTIFIER { if(check_const_var($2)) yyerrok; fprintf(yy_output, "-=1"); } //--var
+	| INC_OP IDENTIFIER { if(check_const_var($2)) yyerrok; fprintf(yy_output, "%s+=1", $2); } //++var
+	| DEC_OP IDENTIFIER { if(check_const_var($2)) yyerrok; fprintf(yy_output, "%s-=1", $2); } //--var
 	;
 
 /*Arguments*/
@@ -136,19 +138,12 @@ argument_expr_list
 	| argument_expr_list ',' { fprintf(yy_output, ", "); } assignment_expr
 	;
 
-/*Unary exprs*/
-/* unary_expr
-	: postfix_expr
-	| INC_OP { fprintf(yy_output, "+=1"); } unary_expr
-	| DEC_OP { fprintf(yy_output, "-=1"); } unary_expr
-	; */
-
 /*Multiplication, division and mod operators*/
 multiplicative_expr
     : postfix_expr
-	| multiplicative_expr '*' { print("*"); } postfix_expr
+	| multiplicative_expr '*' { print("*"); current_op=TRUE; } postfix_expr {current_op=FALSE; if (check_type_op(yyval.name, type_aux, '*')) yyerrok; }
     | multiplicative_expr '*' { print("*"); } error { yyerrok;}
-    | multiplicative_expr '/' { print("/"); } postfix_expr
+    | multiplicative_expr '/' { print("/"); current_op=TRUE;} postfix_expr {current_op=FALSE; if (check_type_op(yyval.name, type_aux, '/')) yyerrok; }
     | multiplicative_expr '/' { print("/"); } error { yyerrok;}
     | multiplicative_expr '%' { print(" %% "); } postfix_expr
     | multiplicative_expr '%' { print(" %% "); } error { yyerrok;}
@@ -157,8 +152,8 @@ multiplicative_expr
 /*Addition and subtraction*/
 additive_expr
 	: multiplicative_expr
-	| additive_expr '+' { print("+"); } multiplicative_expr
-	| additive_expr '-' { print("-"); } multiplicative_expr
+	| additive_expr '+' { print("+"); current_op=TRUE; } multiplicative_expr {current_op=FALSE; if (check_type_op(yyval.name, type_aux, '+')) yyerrok; }
+	| additive_expr '-' { print("-"); current_op=TRUE; } multiplicative_expr {current_op=FALSE; if (check_type_op(yyval.name, type_aux, '-')) yyerrok; }
     | additive_expr '+' { print("+"); } error { yyerrok;}
 	| additive_expr '-' { print("-"); } error { yyerrok;}
 	;
@@ -205,7 +200,7 @@ conditional_expr
 
 /*Assignment expr*/
 assignment_expr
-	: conditional_expr
+	: conditional_expr 
 	/* | unary_expr assignment_operator assignment_expr */
 	| postfix_expr assignment_operator assignment_expr
     | error assignment_operator assignment_expr {yyerrok;}
@@ -213,7 +208,7 @@ assignment_expr
 
 /*Assignment operators*/
 assignment_operator
-	: '=' { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, " = "); }
+	: '=' { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, " = "); } 
 	| MUL_ASSIGN { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, " *= "); }
 	| DIV_ASSIGN { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, " /= "); }
 	| MOD_ASSIGN { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, " %%= "); }
@@ -563,18 +558,19 @@ void print_sym_table()
 	}	
 }
 
-void print_type() {
-	switch(current_type) {
+char* get_type(int type) {
+	switch(type) {
 		case T_INT:
-			printf("Int\n"); break;
+			return "int";
 		case T_CHAR:
-			printf("Char\n"); break;
+			return "char";
 		case T_FLOAT:
-			printf("Float\n"); break;
+			return "float";
 		case T_DOUBLE:
-			printf("Double\n"); break;
+			return "double";
+		default:
+			return NULL;
 	}
-
 }
 
 int check_const_var(char *name) {
@@ -587,6 +583,46 @@ int check_const_var(char *name) {
 		return TRUE;
 	}
 	return FALSE;
+}
+
+int check_type_op(char *name1, char *name2, char op) {
+	//get the operand data from the symbol table
+	symrec* sym1 = getsym(name1);
+	symrec* sym2 = getsym(name2);
+	if(sym1 == NULL || sym2 == NULL) 
+		return FALSE;
+	//Gets the data type of the operands
+	int name1_type = sym1->data_type;
+	int name2_type = sym2->data_type;
+
+	int ban = FALSE;
+	if(op == '+' || op == '-' || op == '*' || op == '/' || op == '%') {
+		//Si no es ninguno de los tipos de datos permitidos
+		if(name1_type != T_INT && name1_type != T_FLOAT && name1_type != T_DOUBLE) {
+			char msg[250];
+			ban = TRUE;
+			sprintf(msg, "Operand %s in operation %c has an illegal type (%s)\n", name1, op, name1_type);
+			yyerror(msg);
+		}
+		//Si no es ninguno de los tipos de datos permitidos
+		if(name2_type != T_INT && name2_type != T_FLOAT && name2_type != T_DOUBLE) {
+			char msg[250];
+			ban = TRUE;
+			sprintf(msg,"Operand %s in operation %c has an illegal type (%s)\n", name1, op, name2_type);
+			yyerror(msg);
+		}
+		/* warning: assignment to ‘int’ from ‘char *’ makes integer from pointer without a cast [-Wint-conversion] */
+		if (name1_type != name2_type) {
+			char msg[250];
+			ban = TRUE;
+			char *str1_type = get_type(name1_type);
+			char *str2_type = get_type(name2_type);
+			sprintf(msg, "operation %c performs an operation with the types (%s)%s and (%s)%s without cast",op,str1_type,name1,str2_type,name2);
+			yyerror(msg);
+		}
+	}
+	
+	return ban;
 }
 
 /*Main function*/
@@ -619,11 +655,7 @@ int main(int argc,char **argv){
 	fclose(yyin);
 	fclose(yy_output);
 	// @REMOVE print_sym_table()
-	print_sym_table();
-	symrec *ptr = getsym("main");
-	symrec *ptr2 = getsym("dia");
-	/* printf("%d\n", ptr->data_type);
-	printf("%d\n", ptr2->data_type); */
+	/* print_sym_table(); */
     /*Translation finished: messages*/
 	if(error)   printf("ERROR in the translation: %s\n", argv[1]);
 	else        printf("SUCCESS translating %s\nTranslated file: %s\n", argv[1], argv[2]);
@@ -631,36 +663,3 @@ int main(int argc,char **argv){
 	return 0;
     
 }
-
-/*
-* Realiza una comprobación de tipo reducida.
-* Verifica que las operaciones de suma, resta, mod, multiplicación y división se realicen 
-* solamente con operandos de tipo float, double o int.
-*/
-/* void comprobacion_de_tipo(char* operando_1, char* operando_2, char operacion)
-{
-	//Trae los datos de los operandos de la tabla de símbolos
-	symrec* operando_1_symrec = getsym(operando_1);
-	symrec* operando_2_symrec = getsym(operando_2);
-	if(operando_1_symrec == NULL || operando_2_symrec == NULL)	//No deberían de poder ser NULL, pero para asegurar 
-		return;
-	//Obtiene el tipo de dato de los operandos
-	char* tipo_operando_1 = operando_1_symrec->type;
-	char* tipo_operando_2 = operando_2_symrec->type;
-	//printf("%s-%s--%s-%s\n",operando_1,tipo_operando_1,operando_2,tipo_operando_2);
-
-	//Si la operación es de suma, resta, multiplicación, división o mod, verifica que los operandos sean float, double o int.
-	if(operacion == '+' || operacion == '-' || operacion == '*' || operacion == '/' || operacion == '%')
-	{
-		//Si no es ninguno de los tipos de datos permitidos
-		if(strcmp(tipo_operando_1,"float")!=0 && strcmp(tipo_operando_1,"double")!=0 && strcmp(tipo_operando_1,"int")!=0)
-		{
-			printf("El operando %s en la operación %c posee un tipo (%s) no permitido, (línea %d)\n", operando_1, operacion, tipo_operando_1, yylineno);
-		}
-				//Si no es ninguno de los tipos de datos permitidos
-		if(strcmp(tipo_operando_2,"float")!=0 && strcmp(tipo_operando_2,"double")!=0 && strcmp(tipo_operando_2,"int")!=0)
-		{
-			printf("El operando %s en la operación %c posee un tipo (%s) no permitido, (línea %d)\n", operando_2, operacion, tipo_operando_2, yylineno);
-		}
-	}
-} */

@@ -1,7 +1,6 @@
 /*Definitions*/
 DIGIT       [0-9]
 LETTER      [a-zA-Z_]
-HEXA        [a-fA-F0-9]
 EXPONENTIAL [Ee][+-]?{DIGIT}+
 FS          (f|F|l|LETTER)
 IS          (u|U|l|LETTER)*
@@ -70,7 +69,7 @@ IS          (u|U|l|LETTER)*
 "break"                                         { return BREAK; }
 
 {LETTER}({LETTER}|{DIGIT})*                     { yylval.name = strdup(yytext); return(IDENTIFIER); }
-0[xX]{HEXA}+{IS}?                               { yylval.name = strdup(yytext); return(CONSTANT); }
+("-")?{DIGIT}+("."{DIGIT}+)?                    { yylval.name = strdup(yytext); return(CONSTANT);}
 0{DIGIT}+{IS}?                                  { yylval.name = strdup(yytext); return(CONSTANT); }
 {DIGIT}+{IS}?                                   { yylval.name = strdup(yytext); return(CONSTANT); }
 LETTER?'(\\.|[^\\'])+'                          { yylval.name = strdup(yytext); return(CONSTANT); }
