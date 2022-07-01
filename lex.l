@@ -6,7 +6,6 @@ EXPONENTIAL [Ee][+-]?{DIGIT}+
 FS          (f|F|l|LETTER)
 IS          (u|U|l|LETTER)*
 
-
 /*Header*/
 %{
 

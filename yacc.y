@@ -8,6 +8,7 @@
 	#define T_FLOAT 30
 	#define T_DOUBLE 40
 	#define T_FUNCTION 50
+	#define T_CONST 60
 	#define TRUE 1
 	#define FALSE 0
     #include <stdio.h>
@@ -21,6 +22,7 @@
         double value;           //Variable lookahead value
 		int data_type;
         int function;           //Function
+		int is_const;
         struct symrec *next;    //Next register pointer
     };
 
@@ -38,6 +40,7 @@
     extern char *yytext;    //Recognizes input tokens
     extern int line_number; //Line number
 	extern void print_type();
+	extern int check_const_var(char *name);
 
     FILE *yy_output;        //Object file
     
@@ -49,10 +52,12 @@
 
     int is_function=0;          //Is a function (flag)
 	int is_switch = FALSE;
+	int dimension = 0;
     int error=0;                //Error flag
     int global = 0;             //Global var falg
     int ind = 0;                //Indentation
 	int current_type;
+	int current_const;
     //int function_definition = 0;//Funcion definition flag
 
     /*Creates an indentation*/
@@ -119,8 +124,10 @@ postfix_expr
 	| postfix_expr '[' { print("["); }  expr ']' { print("]"); }
 	| postfix_expr '(' { print("("); } ')' { print(")"); }
 	| postfix_expr '(' { print("("); } argument_expr_list ')' { print(")"); }
-	| postfix_expr INC_OP { fprintf(yy_output, "+=1"); }
-	| postfix_expr DEC_OP { fprintf(yy_output, "-=1"); }
+	| postfix_expr INC_OP { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, "+=1"); } //var++
+	| postfix_expr DEC_OP { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, "-=1"); } //var--
+	| INC_OP IDENTIFIER { if(check_const_var($2)) yyerrok; fprintf(yy_output, "+=1"); } //++var
+	| DEC_OP IDENTIFIER { if(check_const_var($2)) yyerrok; fprintf(yy_output, "-=1"); } //--var
 	;
 
 /*Arguments*/
@@ -130,20 +137,20 @@ argument_expr_list
 	;
 
 /*Unary exprs*/
-unary_expr
+/* unary_expr
 	: postfix_expr
 	| INC_OP { fprintf(yy_output, "+=1"); } unary_expr
 	| DEC_OP { fprintf(yy_output, "-=1"); } unary_expr
-	;
+	; */
 
 /*Multiplication, division and mod operators*/
 multiplicative_expr
-    : unary_expr
-	| multiplicative_expr '*' { print("*"); } unary_expr
+    : postfix_expr
+	| multiplicative_expr '*' { print("*"); } postfix_expr
     | multiplicative_expr '*' { print("*"); } error { yyerrok;}
-    | multiplicative_expr '/' { print("/"); } unary_expr
+    | multiplicative_expr '/' { print("/"); } postfix_expr
     | multiplicative_expr '/' { print("/"); } error { yyerrok;}
-    | multiplicative_expr '%' { print(" %% "); } unary_expr
+    | multiplicative_expr '%' { print(" %% "); } postfix_expr
     | multiplicative_expr '%' { print(" %% "); } error { yyerrok;}
     ;
 
@@ -199,18 +206,19 @@ conditional_expr
 /*Assignment expr*/
 assignment_expr
 	: conditional_expr
-	| unary_expr assignment_operator assignment_expr
+	/* | unary_expr assignment_operator assignment_expr */
+	| postfix_expr assignment_operator assignment_expr
     | error assignment_operator assignment_expr {yyerrok;}
 	;
 
 /*Assignment operators*/
 assignment_operator
-	: '=' { fprintf(yy_output, " = "); }
-	| MUL_ASSIGN { fprintf(yy_output, " *= "); }
-	| DIV_ASSIGN { fprintf(yy_output, " /= "); }
-	| MOD_ASSIGN { fprintf(yy_output, " %%= "); }
-	| ADD_ASSIGN { fprintf(yy_output, " += "); }
-	| SUB_ASSIGN { fprintf(yy_output, " -= "); }
+	: '=' { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, " = "); }
+	| MUL_ASSIGN { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, " *= "); }
+	| DIV_ASSIGN { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, " /= "); }
+	| MOD_ASSIGN { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, " %%= "); }
+	| ADD_ASSIGN { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, " += "); }
+	| SUB_ASSIGN { if(check_const_var(yyval.name)) yyerrok; fprintf(yy_output, " -= "); }
 	;
 
 /*exprs*/
@@ -242,6 +250,12 @@ declaration_specifiers
 	| type_qualifier
 	| type_qualifier declaration_specifiers
 	;
+
+/*Type qualifier*/
+type_qualifier
+	: CONST {global = TRUE;}
+	;
+
 
 /*Declarations*/
 init_declarator_list
@@ -276,10 +290,10 @@ init_declarator
 
 /*Types*/
 type_specifier
-	: CHAR {current_type = T_CHAR;}
-	| INT  {current_type = T_INT;}
-	| FLOAT {current_type = T_FLOAT;}
-	| DOUBLE {current_type = T_DOUBLE;}
+	: CHAR   { if(!global) global=-FALSE; current_type = T_CHAR;   }
+	| INT    { if(!global) global=-FALSE; current_type = T_INT;    }
+	| FLOAT  { if(!global) global=-FALSE; current_type = T_FLOAT;  }
+	| DOUBLE { if(!global) global=-FALSE; current_type = T_DOUBLE; }
 	| SIGNED
 	| UNSIGNED
 	| VOID
@@ -292,12 +306,16 @@ declarator
 
 /*Functions and arrays*/
 direct_declarator
-    : IDENTIFIER { if (is_function) /*fprintf(yy_output, "", $1); else */is_function = 0; }
+    : IDENTIFIER { if (is_function)is_function = 0; }
     | IDENTIFIER '[' ']' { if (!is_function) fprintf(yy_output, " %s = [] \n", $1); else is_function = 0; }
-	| IDENTIFIER array_list { if (!is_function) fprintf(yy_output, "%s = [%s] \n", $1, $2); else is_function = 0; indent();}
-    | IDENTIFIER '[' CONSTANT ']' {fprintf(yy_output, "%s = [0 for i in range(%s)] \n",$1,$3);	indent();}
+	| IDENTIFIER array_list { 
+		if (!is_function) fprintf(yy_output, "%s = [%s] \n", $1, $2); 
+		else is_function = 0; indent();}
+    | IDENTIFIER '[' CONSTANT ']' {fprintf(yy_output, "%s = [None] * %s\n",$1,$3);	indent();}
     | IDENTIFIER '(' ')' { if (!is_function)fprintf(yy_output, "def %s():", $1); else is_function = 0; }
-	| IDENTIFIER '(' parameter_type_list ')' { if (!is_function) fprintf(yy_output, "def %s(%s):", $1, $3); else is_function = 0; }
+	| IDENTIFIER '(' parameter_type_list ')' { 
+		if (!is_function) fprintf(yy_output, "def %s(%s):", $1, $3); 
+		else is_function = 0; }
     ;
 
 /*Arrays*/
@@ -310,13 +328,13 @@ init_direct_declarator
 /*Arrays list*/
 array_list
 	: array_declaration
-	| array_list array_declaration { asprintf(&$$, "%s,%s", $1, $2); }
+	| array_list array_declaration { asprintf(&$$, "[None] * %s for i in range(%s)", $2, $1); }
 	;
 
 /*Arrays declaration*/
 array_declaration
 	: '[' ']' { asprintf(&$$, "[] "); } //@todo indent()
-	| '[' CONSTANT ']' { asprintf(&$$, "[0 for i in range(%s)] ",$2);  } //@todo indent()
+	| '[' CONSTANT ']' { asprintf(&$$, "%s",$2); } //@todo indent()
 	;
 
 /*Parameter type*/
@@ -345,13 +363,9 @@ initializer_list
 initializer
 	: IDENTIFIER
 	| CONSTANT
-	| '{' initializer_list '}' { asprintf(&$$, "[%s] \n", $2); }
+	| '{' initializer_list '}' { asprintf(&$$, "[%s]", $2); }
 	;
 
-/*Type qualifier*/
-type_qualifier
-	: CONST { fprintf(yy_output, "const "); }
-	;
 
 output_list
 	: IDENTIFIER {fprintf(yy_output, "%s", $1);}
@@ -361,23 +375,13 @@ output
 	: PRINTFF '(' STR ')' ';' {fprintf(yy_output, "print(%s)\n", $3); indent();}
 	| PRINTFF '(' STR ',' {fprintf(yy_output, "print(%s % (", $3);} output_list ')' ';' {print("))\n"); indent();}
 
-/*Statements*/
-statement
-	: labeled_statement
-	| output
-	| compound_statement
-	| expr_statement
-	| selection_statement
-	| iteration_statement
-	| jump_statement
-	;
 
 /*Open scope*/
 open_curly
     : '{'
     {
   		fprintf(yy_output,"\n");
-  		ind += 1; 
+  		ind++; 
 		indent();
   	}
   	;
@@ -387,7 +391,7 @@ close_curly
     : '}'
     {
   		fprintf(yy_output,"\n");
-  		ind -= 1; 
+  		ind--; 
 		indent();
   	}
   	;
@@ -420,19 +424,18 @@ expr_statement
     | expr error { yyerror("A \";\" (semicolon) is missing into the statement");yyerrok; }
 	;
 
-// INIC CONDITIONAL
-// @todo: hacer if anidados el tema del switch.
-/*'Else' statement*/
-else_statement
-	: ELSE { print("else:"); } statement
-	| %prec IF_AUX
-	;
-
-/*Conditional*/
-selection_statement
-	: IF { print("if"); } '(' { print("("); } expr ')' { print("):"); } statement  else_statement
-    | IF { print("if"); } error expr ')' { print("):"); } statement { yyerror("A \"(\" (open parenthesis) is missing after the 'if' statement");yyerrok; }
+/*Statements*/
+statement
+	: labeled_statement
+	| output
+	| compound_statement
+	| expr_statement
+	| IF { print("if"); } '(' { print("("); } expr ')' { print("):"); } statement
+	| ELSE IF{ print("elif"); } '(' { print("("); } expr ')' { print("):"); } statement
+	| ELSE {print("else:"); } statement
 	| SWITCH { fprintf(yy_output, "match "); is_switch = TRUE;}'(' expr ')' { print(":"); } statement {is_switch = FALSE;}
+	| iteration_statement
+	| jump_statement
 	;
 
 /*Labeled statements*/
@@ -536,6 +539,7 @@ symrec * putsym(char *sym_name, int sym_type, int b_function) {
 	ptr->value = 0;
 	ptr->function = b_function;
 	ptr->data_type = current_type;
+	ptr->is_const = global;
 	ptr->next =(struct symrec *) sym_table;
 	sym_table = ptr;
 	return ptr;
@@ -555,7 +559,7 @@ void print_sym_table()
 	printf("\n\n\t\t\tSym Table\n");
     symrec *ptr;
     for (ptr = sym_table; ptr != (symrec *)0; ptr = (symrec *)ptr->next) {
-        printf("ID:%s\t\t\t Type: %d\t\t data_type: %d\n", ptr->name, ptr->type, ptr->data_type);
+        printf("ID:%s\nType: %d\ndata_type:%d\n is_const %d\n\n", ptr->name, ptr->type, ptr->data_type, ptr->is_const);
 	}	
 }
 
@@ -571,6 +575,18 @@ void print_type() {
 			printf("Double\n"); break;
 	}
 
+}
+
+int check_const_var(char *name) {
+	symrec *ptr = getsym(name);
+	if(ptr->is_const){
+		char msg[200];
+		sprintf(msg, "Cannot modify variable's value. Variable %s was declared as const.", name);
+		yyerror(msg);
+		/* yyerrok; */
+		return TRUE;
+	}
+	return FALSE;
 }
 
 /*Main function*/
@@ -603,7 +619,11 @@ int main(int argc,char **argv){
 	fclose(yyin);
 	fclose(yy_output);
 	// @REMOVE print_sym_table()
-	/* print_sym_table(); */
+	print_sym_table();
+	symrec *ptr = getsym("main");
+	symrec *ptr2 = getsym("dia");
+	/* printf("%d\n", ptr->data_type);
+	printf("%d\n", ptr2->data_type); */
     /*Translation finished: messages*/
 	if(error)   printf("ERROR in the translation: %s\n", argv[1]);
 	else        printf("SUCCESS translating %s\nTranslated file: %s\n", argv[1], argv[2]);
@@ -611,3 +631,36 @@ int main(int argc,char **argv){
 	return 0;
     
 }
+
+/*
+* Realiza una comprobación de tipo reducida.
+* Verifica que las operaciones de suma, resta, mod, multiplicación y división se realicen 
+* solamente con operandos de tipo float, double o int.
+*/
+/* void comprobacion_de_tipo(char* operando_1, char* operando_2, char operacion)
+{
+	//Trae los datos de los operandos de la tabla de símbolos
+	symrec* operando_1_symrec = getsym(operando_1);
+	symrec* operando_2_symrec = getsym(operando_2);
+	if(operando_1_symrec == NULL || operando_2_symrec == NULL)	//No deberían de poder ser NULL, pero para asegurar 
+		return;
+	//Obtiene el tipo de dato de los operandos
+	char* tipo_operando_1 = operando_1_symrec->type;
+	char* tipo_operando_2 = operando_2_symrec->type;
+	//printf("%s-%s--%s-%s\n",operando_1,tipo_operando_1,operando_2,tipo_operando_2);
+
+	//Si la operación es de suma, resta, multiplicación, división o mod, verifica que los operandos sean float, double o int.
+	if(operacion == '+' || operacion == '-' || operacion == '*' || operacion == '/' || operacion == '%')
+	{
+		//Si no es ninguno de los tipos de datos permitidos
+		if(strcmp(tipo_operando_1,"float")!=0 && strcmp(tipo_operando_1,"double")!=0 && strcmp(tipo_operando_1,"int")!=0)
+		{
+			printf("El operando %s en la operación %c posee un tipo (%s) no permitido, (línea %d)\n", operando_1, operacion, tipo_operando_1, yylineno);
+		}
+				//Si no es ninguno de los tipos de datos permitidos
+		if(strcmp(tipo_operando_2,"float")!=0 && strcmp(tipo_operando_2,"double")!=0 && strcmp(tipo_operando_2,"int")!=0)
+		{
+			printf("El operando %s en la operación %c posee un tipo (%s) no permitido, (línea %d)\n", operando_2, operacion, tipo_operando_2, yylineno);
+		}
+	}
+} */
