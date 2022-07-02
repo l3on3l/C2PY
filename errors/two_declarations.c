@@ -1,6 +1,7 @@
 #include <stdio.h>
 
+int number;
+
 int main(){
-    const int CONSTANTE = 1;
-    CONSTANTE = 2;
+    int number;
   }
