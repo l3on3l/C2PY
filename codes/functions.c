@@ -17,8 +17,20 @@ void fibbonacci (int n) {
 	}
 }
 
+
+void pow2 (int n, int m) {
+    int i = 1;
+	int res = 1;
+
+	while (i <= m) {
+		res = res * n;
+		i++;
+	}
+	printf("res = %d", res);
+}
+
 int main() {
     fibbonacci(10);
-
+	pow2(4,3);
     return 0;
 }
